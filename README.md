@@ -6,7 +6,8 @@ The **ASAP** (**Acessible Surface Area Project**) propose a quick and easy tool 
 
 ## Requirements
 
-
+**WARNING about NACCESS**
+Download of NACCESS require decryption with key sent by mail, sent by the developper of NACCESS, Simon HUBBARD. Given the deadline of the project and the availability of NACCESS on the University computers its installation is not managed here, either ask for the decryption key yourself **or** use a machine with the software already installed.
 
 ## Basic Usage
 
