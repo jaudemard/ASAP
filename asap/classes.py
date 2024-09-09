@@ -3,6 +3,32 @@ import math
 import numpy as np
 import os
 
+ATOMIC_RADII = {
+        "H": 1.200,
+        "HE": 1.400,
+        "C": 1.700,
+        "N": 1.550,
+        "O": 1.520,
+        "F": 1.470,
+        "NA": 2.270,
+        "MG": 1.730,
+        "P": 1.800,
+        "S": 1.800,
+        "CL": 1.750,
+        "K": 2.750,
+        "CA": 2.310,
+        "NI": 1.630,
+        "CU": 1.400,
+        "ZN": 1.390,
+        "SE": 1.900,
+        "BR": 1.850,
+        "CD": 1.580,
+        "I": 1.980,
+        "HG": 1.550,
+    }
+
+pdb.Residue.Residue
+
 
 class Sphere:
     def __init__(self, center:list=[0,0,0], radius:int|float=1, method:str="golden", n:int=92):
@@ -55,7 +81,7 @@ class Sphere:
 
         list_points = []
         for i in range(0,n):
-            x,y,z = self.lattice[i]
+            x,y,z = self.lattice[i].coord
 
             # Scale to match radius
             x = x * radius
@@ -68,38 +94,65 @@ class Sphere:
 
             list_points.append(Point([x,y,z]))
 
-        return list_points
+        self.lattice = list_points
 
 class Point:
     """Composite class of the Sphere. Represent a point of its lattice."""
     def __init__(self, coord:list):
         self.coord = coord
+        self.accessibility = True
 
-    def set_accessiblity(self, accesibility:bool=True):
-        self.accessibility = accesibility
+    def set_accessibility(self, accessibility:bool=True):
+        self.accessibility = accessibility
 
 class Protein:
-    def __init__(self, pdb_path:str, name:str="protein"):
-        self.name = name
+    def __init__(self, pdb_path:str=None, name:str=None, model:int=0):
+        """
         
+        """
+        if name is None:
+            file_name = pdb_path.split("/")[-1].split(".")[0]
+
+        self.name = file_name
+
+        self.structure = self._extract_structure(pdb_path)
+        self.chains = self._extract_chains()
+        self.residues = self._extract_residues()
+        self.atoms = self._extract_atoms()
+
+    def _extract_structure(self, pdb_path:str):
         if pdb_path is not None: # Handle empty path
+            # Handle wrong path
             if not os.path.exists(pdb_path):
-                raise FileNotFoundError(f"No PDB file found at: {pdb_path}")   
+                raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
+            # Handle wrong format (extension)
+            elif pdb_path.split('.')[-1] != "pdb":
+                raise FileNotFoundError(f"No PDB file found at: {pdb_path}") 
         
         # Extract structure from pdb file
-        self.structure = pdb.PDBParser().get_structure(name, pdb_path)
+        return pdb.PDBParser().get_structure(self.name, pdb_path)
 
-        self.list_atoms = []
-        # Store the protein atoms as Atom object in a list
-        for model in self.structure:
-            for chain in model:
-                for amino_acid in chain:
-                    for atom in amino_acid:
-                        elem = atom.element
-                        id = atom.id
-                        residue = amino_acid
-                        coord = list(atom.coord)
-                        self.list_atoms.append(Atom(id, elem, residue, coord, 2))
+    def _extract_chains(self):
+        list_chains = []
+        for chain in self.structure:
+            list_chains.append(chain)
+        return list_chains
+    
+    def _extract_residues(self):
+        self.list_residue = []
+        # Extract information about chain, amino acid ans atoms
+        for chain in self.chains:
+            for amino_acid in chain:
+                # Do not include water molecule
+                if amino_acid.resname == "HOH": continue
+                for atom in amino_acid:
+                    elem = atom.element
+                    id = atom.id
+                    residue = amino_acid.resname
+                    coord = list(atom.coord)
+                    radius = ATOMIC_RADII[elem]
+                    self.list_atoms.append(Atom(id, elem, residue, coord, radius))
+        
 
         
 class Atom:
@@ -112,6 +165,7 @@ class Atom:
         self.residue = residue
         self.coord = coord
         self.radius = radius
+        self.area = 4 * np.pi * (ATOMIC_RADII[elem])**2
 
 
     def distance(self, coord2:list):
@@ -135,7 +189,7 @@ class Atom:
         return distance
     
 
-    def connectiviy(self, atoms_list:list, threshold:int|float=5):
+    def connectivity(self, atoms_list:list, threshold:int|float=5):
         """Compute the neighbour of the Atom with a max distance.
         
         Args
@@ -161,19 +215,38 @@ if __name__ == "__main__":
 
     PROTEIN = Protein("toy/1l2y.pdb")
 
-    atome = PROTEIN.list_atoms[75]
-
-    sphere = Sphere(n=50)
-
     counter = 0
+ 
+    print(len(PROTEIN.list_atoms),"****")
 
-    print(type(sphere.scale_and_move(atome.coord, atome.radius)))
+    for atom in PROTEIN.list_atoms:
+        sphere = Sphere(n=92) 
+        sphere.scale_and_move(atom.coord, atom.radius)
 
-""" 
-sphere = Sphere(n=92) 
-for atom in protein.list_atoms:
-    for s
+        atom.connectivity(PROTEIN.list_atoms, 5)
 
 
-"""
+        for point in sphere.lattice:
+            for neighbour in atom.neighbour:
+                if neighbour.id == atom.id: continue
 
+                dist = neighbour.distance(point.coord)
+
+                if dist < (neighbour.radius + (1.52*2)):
+                    point.accessibility = False
+                else:
+                    point.accessibility = True
+
+        accessible_point = [point.accessibility for point in sphere.lattice].count(True)
+
+        area = 4 * np.pi * (atom.radius)**2
+
+        cover_factor = area / 92
+
+        atom.accessibility = accessible_point * cover_factor
+
+    list_access = [a.accessibility for a in PROTEIN.list_atoms]
+    
+    print(sum(list_access))
+
+        

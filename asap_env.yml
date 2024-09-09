@@ -1,0 +1,10 @@
+name: asap
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - pip
+  - pip:
+    - pandas
+    - docopt
+    - biopython
