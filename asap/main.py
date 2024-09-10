@@ -1,9 +1,27 @@
-"""TODO"""
-import docopt
-import classes
+"""
+usage:
+    asap <command> [<args>...]
 
-def main():
-    pass # TODO
+options:
+    -h --help  Show help
+
+commands:
+    shrake_rupley   Determine Solvent Accessible Surface Area with a Shrake and Rupley based method.
+"""
+import docopt
+import importlib
+import sys
+
+def main(args=None):
+    args = docopt.docopt(__doc__)
+
+    # Extract command
+    command = args.pop('<command>')
+    # Extract options and argument
+    command_args = args.pop('<args>')
+
+    if command == "shrake_rupley":
+        
 
 if __name__ == '__main__':
     main()
