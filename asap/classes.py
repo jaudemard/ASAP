@@ -55,18 +55,19 @@ class Sphere:
         Returns:
             list_points (list of tuples): Coordinates (x,y,z) of the points in the sphere.
         """
-        golden_ratio = (1 + 5**0.5)*0.5
+        golden_ratio = np.pi * (3 - np.sqrt(5))
+
+        offset = 2/ n
 
         list_points = []
 
         # Compute the n envenly spaced points 
         for i in range(0,n):
-            theta = 2 * np.pi * i / golden_ratio
-            phi = np.arccos(1 - 2*(i+0.5)/n)
-
-            x = np.cos(theta) * np.sin(phi)
-            y = np.sin(theta) * np.sin(phi)
-            z = np.cos(phi)
+            y = i * offset - 1 + (offset/2)
+            r = np.sqrt(1- y * y)
+            phi = i * golden_ratio
+            x = np.cos(phi) * r
+            z = np.sin(phi) * r
 
             list_points.append(Point([x,y,z]))
                 
@@ -112,7 +113,7 @@ class Protein:
         """
         TODO
         """
-        if name is not None:
+        if name is None:
             file_name = pdb_path.split("/")[-1].split(".")[0]
             self.name = file_name
         # Handle wrong path
@@ -189,6 +190,15 @@ class Chain:
     def __init__(self, id, rescontent:list=None):
         self.id = id
         self.rescontent = rescontent
+        
+        if rescontent is not None:
+            self.area = np.sum([res.area for res in self.rescontent])
+            self.accessibility = self.set_accessibility()
+
+    def set_accessibility(self, accessibility:float|int=None):
+        if accessibility is None:
+            accessibility
+
 
 class Residue:
     def __init__(self, id, type, atomscontent:list=None):
@@ -196,8 +206,7 @@ class Residue:
         self.type = type
         self.atomscontent = atomscontent
 
-
-
+        self.area = np.sum([atom.area for atom in self.atomscontent])
 
         
 class Atom:
@@ -223,15 +232,14 @@ class Atom:
                 the given point.
         """
         # Extract the Atom coordinates
-        coord1 = self.coord
-        # Compute distance
-        sum = (coord2[0] - coord1[0])**2 + (coord2[1] - coord2[1])**2 + (coord2[2] - coord1[2])**2
-        distance = math.sqrt(sum)
+        coord1 = np.array(self.coord)
+        coord2 = np.array(coord2)
+        distance = np.linalg.norm(coord1 - coord2)
 
         return distance
     
 
-    def connectivity(self, atoms_list:list, threshold:int|float=5):
+    def connectivity(self, atoms_list:list, threshold:int|float=15):
         """Compute the neighbour of the Atom with a max distance.
         
         Args
