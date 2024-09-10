@@ -2,6 +2,7 @@ import Bio.PDB as pdb
 import math
 import numpy as np
 import os
+import sys
 
 ATOMIC_RADII = {
         "H": 1.200,
@@ -105,61 +106,103 @@ class Point:
     def set_accessibility(self, accessibility:bool=True):
         self.accessibility = accessibility
 
+
 class Protein:
     def __init__(self, pdb_path:str=None, name:str=None, model:int=0):
         """
-        
+        TODO
         """
-        if name is None:
+        if name is not None:
             file_name = pdb_path.split("/")[-1].split(".")[0]
+            self.name = file_name
+        # Handle wrong path
+        if not os.path.exists(pdb_path):
+            raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
+        # Handle wrong format (extension)
+        elif pdb_path.split('.')[-1] != "pdb":
+            raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
 
-        self.name = file_name
+        self.structure, self.chains, self.residues, self.atoms = self._extract_structure(pdb_path, model)
 
-        self.structure = self._extract_structure(pdb_path)
-        self.chains = self._extract_chains()
-        self.residues = self._extract_residues()
-        self.atoms = self._extract_atoms()
+    def _extract_structure(self, pdb_path:str, model:int=0): 
+        """
+        TODO
+        """
 
-    def _extract_structure(self, pdb_path:str):
-        if pdb_path is not None: # Handle empty path
-            # Handle wrong path
-            if not os.path.exists(pdb_path):
-                raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
-            # Handle wrong format (extension)
-            elif pdb_path.split('.')[-1] != "pdb":
-                raise FileNotFoundError(f"No PDB file found at: {pdb_path}") 
-        
-        # Extract structure from pdb file
-        return pdb.PDBParser().get_structure(self.name, pdb_path)
+        chains = []
+        residues = []
+        atoms = []
 
-    def _extract_chains(self):
-        list_chains = []
-        for chain in self.structure:
-            list_chains.append(chain)
-        return list_chains
-    
-    def _extract_residues(self):
-        self.list_residue = []
-        # Extract information about chain, amino acid ans atoms
-        for chain in self.chains:
+        # Use biopython parser to extract whole structure and its content
+        structure = pdb.PDBParser().get_structure(self.name, pdb_path)
+
+        for chain in structure[model]:
+            # Store the chain's residues
+            chain_res = []
+
             for amino_acid in chain:
-                # Do not include water molecule
+                # Exclude water molecules
                 if amino_acid.resname == "HOH": continue
+                # Store the residue's atoms
+                res_atoms = []
+
                 for atom in amino_acid:
+                    # Extract data about the atom
                     elem = atom.element
                     id = atom.id
                     residue = amino_acid.resname
                     coord = list(atom.coord)
                     radius = ATOMIC_RADII[elem]
-                    self.list_atoms.append(Atom(id, elem, residue, coord, radius))
+
+                    # Create an object of the Atom class
+                    atom_object = Atom(id, elem, residue, coord, radius)
+
+                    # Add atoms to the structure list
+                    atoms.append(atom_object)
+                    # Add atoms to the residue's atoms list
+                    res_atoms.append(atom_object)
+                
+                # Extract data about the residue
+                id = amino_acid.id
+                type = amino_acid.resname
+
+                # Create an object of the residue class
+                residue_object = Residue(id, type, res_atoms)
+
+                # Add residue to the structure list
+                residues.append(residue_object)
+                # Add residue to the chain class
+                chain_res.append(residue_object)
+            
+            # Extract data about the chain
+            id = chain.id
+
+            # Create an object of the Chain class
+            chain_object = Chain(id, chain_res)
+
+            # Add chain to the structure list
+            chains.append(chain_object)
         
+        return structure, chains, residues, atoms
+
+class Chain:
+    def __init__(self, id, rescontent:list=None):
+        self.id = id
+        self.rescontent = rescontent
+
+class Residue:
+    def __init__(self, id, type, atomscontent:list=None):
+        self.id = id
+        self.type = type
+        self.atomscontent = atomscontent
+
+
+
 
         
 class Atom:
     def __init__(self, id, elem, residue, coord, radius):
-        '''
-        Atoms are part of proteins
-        '''
+        """TODO"""
         self.id = id
         self.elem = elem
         self.residue = residue
@@ -173,9 +216,8 @@ class Atom:
         Distance calculation between the atom and a given point.
         
         Args
-            coord (list): A list of 3 coordinates with which distance is
+            coord2 (list): A list of 3 coordinates with which distance is
                 calculated.
-        
         Returns:
             distance (float): Distance between the atom and 
                 the given point.
@@ -212,41 +254,6 @@ class Atom:
 
 
 if __name__ == "__main__":
-
-    PROTEIN = Protein("toy/1l2y.pdb")
-
-    counter = 0
- 
-    print(len(PROTEIN.list_atoms),"****")
-
-    for atom in PROTEIN.list_atoms:
-        sphere = Sphere(n=92) 
-        sphere.scale_and_move(atom.coord, atom.radius)
-
-        atom.connectivity(PROTEIN.list_atoms, 5)
-
-
-        for point in sphere.lattice:
-            for neighbour in atom.neighbour:
-                if neighbour.id == atom.id: continue
-
-                dist = neighbour.distance(point.coord)
-
-                if dist < (neighbour.radius + (1.52*2)):
-                    point.accessibility = False
-                else:
-                    point.accessibility = True
-
-        accessible_point = [point.accessibility for point in sphere.lattice].count(True)
-
-        area = 4 * np.pi * (atom.radius)**2
-
-        cover_factor = area / 92
-
-        atom.accessibility = accessible_point * cover_factor
-
-    list_access = [a.accessibility for a in PROTEIN.list_atoms]
-    
-    print(sum(list_access))
+    sys.exit()
 
         
