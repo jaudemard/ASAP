@@ -4,7 +4,6 @@ usage:
 
 options:
     -h --help  Show help
-
 commands:
     shrake_rupley   Determine Solvent Accessible Surface Area with a Shrake and Rupley based method.
 """
@@ -21,7 +20,8 @@ def main(args=None):
     command_args = args.pop('<args>')
 
     if command == "shrake_rupley":
-        
+        import shrake_rupley
+        shrake_rupley.shrake_rupley_cli(command_args)
 
 if __name__ == '__main__':
     main()

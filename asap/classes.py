@@ -1,5 +1,4 @@
 import Bio.PDB as pdb
-import math
 import numpy as np
 import os
 import sys
@@ -28,11 +27,14 @@ ATOMIC_RADII = {
         "HG": 1.550,
     }
 
-pdb.Residue.Residue
-
 
 class Sphere:
     def __init__(self, center:list=[0,0,0], radius:int|float=1, method:str="golden", n:int=92):
+        """
+        A sphere is a 3-dimensional object made of a center point and 
+        a lattice. The lattice is done using the golden ratio method, to space
+        evenly point around the center.
+        """
         self.center = center
         self.radius = radius
 
@@ -51,7 +53,6 @@ class Sphere:
 
         Args:
             n (int): Amount of points forming the sphere.
-
         Returns:
             list_points (list of tuples): Coordinates (x,y,z) of the points in the sphere.
         """
@@ -69,12 +70,21 @@ class Sphere:
             x = np.cos(phi) * r
             z = np.sin(phi) * r
 
-            list_points.append(Point([x,y,z]))
+            coord = np.array([x,y,z])
+
+            list_points.append(Point(coord))
                 
         return list_points
     
 
-    def scale_and_move(self, center:list=[0,0,0], radius:int|float=None):
+    def scale_and_move(self, center:np.array, radius:int|float):
+        """
+        Scale up or down the sphere and move it to a new center.
+
+        Args:
+            center (np.array): An array of 3 coordinates
+            raidus (int or float): New radius to scale the sphere        
+        """
         # Use Van der Walls surface radius by default
         if radius is None:
             radius = self.radius
@@ -94,40 +104,66 @@ class Sphere:
             y = y + center[1]
             z = z + center[2]
 
-            list_points.append(Point([x,y,z]))
+            coord = np.array([x,y,z])
+
+            list_points.append(Point(coord))
 
         self.lattice = list_points
 
 class Point:
-    """Composite class of the Sphere. Represent a point of its lattice."""
     def __init__(self, coord:list):
+        """Composite class of the Sphere. Represent a point of its lattice."""
         self.coord = coord
-        self.accessibility = True
+        self.accessibility = True # Accessibility of the point by the probe
 
     def set_accessibility(self, accessibility:bool=True):
+        """Update accessibility of the point."""
         self.accessibility = accessibility
 
 
 class Protein:
-    def __init__(self, pdb_path:str=None, name:str=None, model:int=0):
+    def __init__(self, pdb_path:str=None, model:int=0):
         """
-        TODO
+        Protein is extracted from a pdb file, include its atoms,
+        residues and chains.
         """
-        if name is None:
-            file_name = pdb_path.split("/")[-1].split(".")[0]
-            self.name = file_name
         # Handle wrong path
         if not os.path.exists(pdb_path):
             raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
         # Handle wrong format (extension)
         elif pdb_path.split('.')[-1] != "pdb":
             raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
-
-        self.structure, self.chains, self.residues, self.atoms = self._extract_structure(pdb_path, model)
+        
+        # Get protein name
+        file_name = pdb_path.split("/")[-1].split(".")[0]
+        self.name = file_name
+        # Get structure instances
+        self.atoms, self.residues, self.chains, self.structure = self._extract_structure(pdb_path, model)
+        # Area is the sum of the chains area
+        self.area = np.sum([chain.area for chain in self.chains])
+        # Default accessibility is the area
+        self.accessibility = self.area
 
     def _extract_structure(self, pdb_path:str, model:int=0): 
         """
-        TODO
+        Extract a structure from a pdb file.
+
+        Parse the pdb file with biopython PDB parser, to get chains, 
+        residues and the atoms. Create instance of Chain, Residue and
+        Atom class for each of them. Return list of Chain, Residue,
+        Atom and the protein's structure.
+
+        It excludes water molecules.
+
+        Args:
+            pdb_path (str): Path of the pdb file.
+            model (int): number of model to use if different models are
+                in the pdb file.
+        Returns:
+            atoms (list of Atom): A list of Atom, from the protein's atoms.
+            residues (list of Residue): A list of Residue from the protein's residues.
+            chains (list of Chain): A list of Chain from the protein's chains.
+            structure: The Bio.PDB.PDBParser structure object
         """
 
         chains = []
@@ -152,23 +188,23 @@ class Protein:
                     elem = atom.element
                     id = atom.id
                     residue = amino_acid.resname
-                    coord = list(atom.coord)
+                    coord = np.array(atom.coord)
                     radius = ATOMIC_RADII[elem]
 
                     # Create an object of the Atom class
                     atom_object = Atom(id, elem, residue, coord, radius)
-
                     # Add atoms to the structure list
                     atoms.append(atom_object)
                     # Add atoms to the residue's atoms list
                     res_atoms.append(atom_object)
                 
                 # Extract data about the residue
-                id = amino_acid.id
+                id = amino_acid.id[1]
                 type = amino_acid.resname
+                res_chain = chain.id
 
                 # Create an object of the residue class
-                residue_object = Residue(id, type, res_atoms)
+                residue_object = Residue(id, type, res_chain, res_atoms)
 
                 # Add residue to the structure list
                 residues.append(residue_object)
@@ -177,69 +213,106 @@ class Protein:
             
             # Extract data about the chain
             id = chain.id
+            protein = self.name
 
             # Create an object of the Chain class
-            chain_object = Chain(id, chain_res)
+            chain_object = Chain(id, chain_res, protein)
 
             # Add chain to the structure list
             chains.append(chain_object)
         
-        return structure, chains, residues, atoms
+        return atoms, residues, chains, structure
+    
+    
+    def update_accessibility(self):
+        """
+        Update accessibility with the sum of the chain accessibility.
+        """
+        self.accessibility = np.sum([chain.accessibility for chain in self.chains])
 
 class Chain:
-    def __init__(self, id, rescontent:list=None):
+    def __init__(self, id, rescontent:list=None, protein:str=None):
+        """
+        Chain is part of a protein.
+        """
         self.id = id
-        self.rescontent = rescontent
+        self.rescontent = rescontent or []
+        self.protein = protein or "protein"
+
+        # Area of a chain is the sum of the residues area
+        self.area = np.sum([res.area for res in rescontent])
+        # Default accessibility is the area
+        self.accessibility = self.area # Default is full accessibility
         
-        if rescontent is not None:
-            self.area = np.sum([res.area for res in self.rescontent])
-            self.accessibility = self.set_accessibility()
-
-    def set_accessibility(self, accessibility:float|int=None):
-        if accessibility is None:
-            accessibility
-
+    def update_accessibility(self):
+        """
+        Update accessibility with the sum of the residues accessibility.
+        """
+        # Chain accessibility is the sum of its residue accessibility
+        self.accessibility = np.sum([res.accessibility for res in self.rescontent])
+            
 
 class Residue:
-    def __init__(self, id, type, atomscontent:list=None):
+    def __init__(self, id:str, type:str, chain:Chain=None, atomscontent:list=None):
+        """
+        Residue is part of a protein chain, or a standalone amino acid.
+        """
         self.id = id
         self.type = type
-        self.atomscontent = atomscontent
-
+        self.atomscontent = atomscontent or []
+        self.chain = chain or "Chain"
+        
+        # Area of a residue is the sum of the atoms area
         self.area = np.sum([atom.area for atom in self.atomscontent])
-
+        # Default accessibility is the area
+        self.accessibility = self.area # Default is full accessibility
+    
+    def update_accessibility(self):
+        """
+        Update accessibility with the sum of the atoms accessibility.
+        """
+        # Amino acid accessibility is the sum of its atoms accessibility
+        self.accessibility = np.sum([atom.accessibility for atom in self.atomscontent])
         
 class Atom:
-    def __init__(self, id, elem, residue, coord, radius):
-        """TODO"""
+    def __init__(self, id:str, elem:str, coord:np.array, radius:float|int, residue:str=None):
+        """
+        An Atom is part of a residue, or a standalone atom.
+        """
         self.id = id
         self.elem = elem
-        self.residue = residue
+        self.residue = residue # Name of the parent residue
         self.coord = coord
-        self.radius = radius
+        self.radius = radius # Van der Walls raidus
+
+        # Van der Walls surface
         self.area = 4 * np.pi * (ATOMIC_RADII[elem])**2
+    
+        self.accessibility = self.area # Default is all surface is accessible
+
+        # Closest atoms
+        self.neighbour = []
 
 
-    def distance(self, coord2:list):
+    def distance(self, coord2:np.array):
         """
         Distance calculation between the atom and a given point.
         
         Args
-            coord2 (list): A list of 3 coordinates with which distance is
+            coord2 (np.array): A list of 3 coordinates with which distance is
                 calculated.
         Returns:
             distance (float): Distance between the atom and 
                 the given point.
         """
         # Extract the Atom coordinates
-        coord1 = np.array(self.coord)
-        coord2 = np.array(coord2)
+        coord1 = self.coord
+        coord2 = coord2
         distance = np.linalg.norm(coord1 - coord2)
-
         return distance
     
 
-    def connectivity(self, atoms_list:list, threshold:int|float=15):
+    def connectivity(self, atoms_list:list, threshold:int|float=None, probe_size:int|float=None):
         """Compute the neighbour of the Atom with a max distance.
         
         Args
@@ -247,10 +320,13 @@ class Atom:
                 is computed.
             threshold (float or int): maximum distance to characterize a
                 neighbouring atom.
+            probe_size (float or int): Size of the probe, to compute ideal threshold automatically.
         
         Returns
             neighbours (list): list of Atoms considered as neighbours
         """
+        if threshold is None:
+            pass # TODO
         # Create (or reset) attribute to store the neighbour
         self.neighbour = []
         # Check distance with atoms in the list
@@ -262,6 +338,6 @@ class Atom:
 
 
 if __name__ == "__main__":
-    sys.exit()
-
+    PROTEIN = Protein("toy/1l2y.pdb")
+    print(PROTEIN.chains[0].id)
         
