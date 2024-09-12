@@ -1,46 +1,74 @@
-"""
-usage:
-    asap shrake_rupley --pdb=FILE --probe INT [--output=DIR] [--model INT] [--point INT]
-
-option:
-    -h  --help    Show help.
-    --pdb_file    Path to the PDB structure
-    --probe    Size of the probe
-    --output    Output directory for the output files
-    --prot_name    Given name of the protein
-    --model    Model used if the pdb include several of them
-
-"""
-
-import classes
+import argparse
+import asap.classes as classes
 import numpy as np
-import docopt
+import csv
+import os
+import sys
+
 
 def command_help():
     """
     Print the command help.
     """
-    print(docopt.docopt(__doc__))
+    print("asap help")
+    print(__doc__)
+
 
 def shrake_rupley_cli(command_args):
-    args = docopt.docopt(__doc__, argv=command_args)
+    """shrake_rupley command line interface"""
+    # Create the parser
+    parser = argparse.ArgumentParser(
+        usage="""usage:
+            asap shrake_rupley --pdb=FILE --probe=FLOAT [--output=<output>] [--model=<model>] [--point=<point>]
 
-    pdb_file = args["--pdb"]
-    probe = args["--probe"]
+        Options:
+            -h --help  Show help.
+            --pdb=<pdb>  Path to the PDB structure
+            --probe=<probe>  Size of the probe
+            --output=<output>  Output directory for the output files
+            --model=<model>  Model used if the pdb includes several of them
+            --point=<point>  Number of points in the sphere lattice
+        """
+    )
+    # Define the arguments
+    parser.add_argument('--pdb', required=True, help='Path to the PDB structure')
+    parser.add_argument('--probe', type=float, required=True, help='Size of the probe')
+    parser.add_argument('--output', default='.', help='Output directory for the output files')
+    parser.add_argument('--model', type=int, default=0, help='Model used if the pdb includes several of them')
+    parser.add_argument('--point', type=int, default=100, help='Number of points in the sphere lattice')
 
-    output = args["--output"] or "."
-    model = args["--model"] or 0
-    sphere_point = args["--point"] or 100
+    # Parse the arguments
+    args = parser.parse_args(command_args)
 
-    shrake_rupley(pdb_file, model, probe, sphere_point, output)
+    # Ensure output directory exists
+    if not os.path.exists(args.output):
+        raise FileNotFoundError(f"No directory at: {args.output}")
 
-def shrake_rupley(pdb_file, model, probe, sphere_point):
+    # Run function
+    shrake_rupley(args.pdb, args.model, args.probe, args.point, args.output)
+
+
+def shrake_rupley(pdb_file, model, probe, sphere_point, output):
+    """From a pdb file, get the Solvent Accessible Surface Area.
+
+    Using a Shrake and Rupley based method of a rolling probe,
+    the function assess the protein's atoms accessible surface.
+    Create a log with total accessibility and per chain accessibility,
+    as well as an atomic level accessibility description.
+
+    Args:
+        pdb_file (str): path to the PDB file
+        model (int): model to use
+        probe (float|int): size of the probe
+        sphere_point (int): amount of point to create golden ratio sphere
+        output (str): output directory
+    """
     # Gets the protein structure
     protein = classes.Protein(pdb_path=pdb_file, model=model)
 
     for atom in protein.atoms:
         # Create a sphere with golden ratio lattice
-        sphere = classes.Sphere(n=sphere_point)
+        sphere = classes.Sphere(n=sphere_point, method="saff_kuijlaars")
         sphere.scale_and_move(center=atom.coord, radius=(atom.radius+probe))
 
         # Compute closest atoms to limit calculation
@@ -50,46 +78,99 @@ def shrake_rupley(pdb_file, model, probe, sphere_point):
         for point in sphere.lattice:
 
             for neighbour in atom.neighbour:
-                if neighbour.id == atom.id: continue
-
                 # Get distance with neighbour
                 dist = neighbour.distance(point.coord)
                 # Check if the point accessibility by the probe is blocked
                 if dist < (neighbour.radius + (probe)):
                     point.set_accessibility(False)
                     break
-
+            # Point is accessible by the probe if no atoms blocks it   
             if point.accessibility == True:
                 accessible_point += 1
 
         area = 4 * np.pi * (atom.radius+probe)**2
         cover_factor = area / sphere_point
+        # Update atom's accessibility
         atom.accessibility = accessible_point * cover_factor
-    protein.accessibility = np.sum([atom.accessibility for atom in protein.atoms])
 
+    # Propagate accessibility to residues
     for residue in protein.residues:
         residue.update_accessibility()
-    
+    # Propagate accessibility to chains
     for chain in protein.chains:
         chain.update_accessibility()
-
     # Update the protein accessibility
     protein.update_accessibility()
 
-    print(protein.accessibility)
+    # Create log
+    log_output(output=output, protein=protein, model=model, probe=probe)
+    # Create csv with detailed atomic accessibility
+    atomic_accessibility(output=output, protein=protein)
+
     
-    def shrake_rupley_output(output, protein, model, execution_time):
+def log_output(output:str, protein:classes.Protein, model:int, probe:float|int):
+    """Create Log of the shrake_rupley command.
+    
+    Args:
+        protein (asap.classes.Protein): A protein object
+        model (int): Model of the protein
+        probe (int or float): Size of the probe used as solvent
+    """
+    # 
+    if not os.path.exists(output):
+        raise FileNotFoundError(f"No directory at: {output}")
 
-        # Create Log
-        with open(f"{output}/{protein.name}.log", "w+") as log:
-            log.write(f"Solvent accessible surface area for {protein.name}, model {model}.\n",
-                      f"Size of the probe: {probe}.\n",
-                      "Method: Shrake and Rupley, with golden ratio spiral.\n",
-                      f"Exclude Water Molecule (HOH).\n",
-                      f"{len(protein.chains)} Chain\n",
-                      f"{len(protein.residues)} Residues\n",
-                      f"{len(protein.atoms)} Atoms\n"
-                      f"Total accessibility: {protein.accessibility}\n.",
-                      f"It took {execution_time}s.")
+    # Create log file
+    with open(f"{output}/{protein.name}.log", "w+") as log:
+        log.write(f"Solvent accessible surface area for {protein.name}, model {model}.\n"
+                    f"Size of the probe: {probe}.\n"
+                    f"Method: Shrake and Rupley, with golden ratio spiral.\n"
+                    f"Exclude water.\n"
+                    f"Exclude hetero-atoms.\n"
+                    f"{len(protein.chains)} Chain\n"
+                    f"{len(protein.residues)} Residues\n"
+                    f"{len(protein.atoms)} Atoms\n"
+                    f"Accessible surface area by the solvent (Squared Angstrum):"
+                    f"Protein: {round(protein.accessibility,4)}\n")
+        # Get chain data
+        for chain in protein.chains:
+            log.write(f"Chain {chain.id}: {round(chain.accessibility,4)}\n")
+        
+        # Redirect to atomic's level file
+        log.write(f"See {output}/{protein.name}.csv for atomic accessibility.")
 
-shrake_rupley("toy/1a5d.pdb", name = "1a5d", model = 0, probe = 1.52, sphere_point = 92)
+
+def atomic_accessibility(output, protein):
+    """
+    Save protein atom accessibility data to a CSV file.
+
+    Columns: Atom ID, Residue Name, Residue Number, Chain Name, Accessibility,
+    and Percentage Accessibility relative to total surface area.
+
+    Args:
+        protein (Protein): Protein instance with atom accessibility data.
+        output (str): Path to save the CSV file (default "protein_accessibility.csv").
+    """
+    # Handle wrong output path
+    if not os.path.exists(output):
+        raise FileNotFoundError(f"No directory at: {output}")
+
+    # Creat csv file
+    with open(f"{output}/{protein.name}.csv", mode='w+', newline='') as file:
+        writer = csv.writer(file)
+        
+        # Write header row
+        writer.writerow(["atom_id", "residue_name", "residue_id", "chain_name", "accessibility", "percent_accessibility"])
+        
+        # Fetch atomic's level data
+        for atom in protein.atoms:
+            atom_id = atom.id
+            residue_name = atom.residue  # Name of the residue this atom belongs to
+            residue_id = next(res.id for res in protein.residues if atom in res.atomscontent)
+            chain_name = next(chain.id for chain in protein.chains if any(res.id == residue_id for res in chain.rescontent))
+            accessibility = atom.accessibility
+            total_area = atom.area  # The total area is just the surface area of the atom itself
+            percent_accessibility = (accessibility / total_area) * 100  # Calculate percentage accessibility
+            
+            # Write data row
+            writer.writerow([atom_id, residue_name, residue_id, chain_name, round(accessibility,4), round(percent_accessibility,4)])
