@@ -1,3 +1,13 @@
+Metadata-Version: 2.1
+Name: asap
+Version: 24.9
+Summary: Compute solvent accessible surface area (SASA) using Shrake-Rupley method.
+Author: Juliette AUDEMARD
+Author-email: juliette.aud@live.fr
+Classifier: Programming Language :: Python :: 3
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+
 # ASAP
 
 The **ASAP** (**Acessible Surface Area Project**) propose an easy python based tool to calculate a protein's accessible surface area to a solvant (SASA).

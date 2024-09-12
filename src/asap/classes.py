@@ -25,6 +25,7 @@ ATOMIC_RADII = {
         "CD": 1.580,
         "I": 1.980,
         "HG": 1.550,
+        "FE": 1.4
     }
 
 MAX_ASA ={
@@ -73,7 +74,7 @@ class Sphere:
         Generate sphere forming points using the golden spiral or fibonacci method.
         """
         golden_ratio = np.pi * (3 - np.sqrt(5))
-        offset = 2 / n
+        offset = 2 / self.n
         points = []
 
         for i in range(self.n):
@@ -151,17 +152,22 @@ class Protein:
 
         # Extract the structure with Biopython
         structure = pdb.PDBParser().get_structure(self.name, pdb_path)
-
+        
         # Parse of the structure
         for chain in structure[model]:
             chain_res = []
             for amino_acid in chain:
                 # Exclude Water
-                if amino_acid.resname == "HOH": continue
+                try:
+                    MAX_ASA[amino_acid.resname]
+                # Handle non proteic object
+                except KeyError:
+                    continue
                 # Exclue Hetero Atoms
-                if amino_acid.id[0] == "H": continue
+                if amino_acid.id[0].startswith("H") or amino_acid.id[0].startswith("H_"): continue
                 res_atoms = [] # to store the residue atoms
                 for atom in amino_acid:
+                    if atom.id == "FE": print(atom.full_id)
                     coord = np.array(atom.coord)
                     elem = atom.element
                     radius = ATOMIC_RADII[elem]

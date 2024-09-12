@@ -106,6 +106,8 @@ def shrake_rupley(pdb_file, model, probe, sphere_point, output):
     log_output(output=output, protein=protein, model=model, probe=probe)
     # Create csv with detailed atomic accessibility
     atomic_accessibility(output=output, protein=protein)
+    # Create csv with detailed residue accessibility and relative accessibility
+    residue_accessibility(output=output, protein=protein)
 
     
 def log_output(output:str, protein:classes.Protein, model:int, probe:float|int):
@@ -130,7 +132,7 @@ def log_output(output:str, protein:classes.Protein, model:int, probe:float|int):
                     f"{len(protein.chains)} Chain\n"
                     f"{len(protein.residues)} Residues\n"
                     f"{len(protein.atoms)} Atoms\n"
-                    f"Accessible surface area by the solvent (Squared Angstrum):"
+                    f"Accessible surface area by the solvent (Squared Angstrom):"
                     f"Protein: {round(protein.accessibility,4)}\n"
                     f"Protein relative SASA: {round(((protein.accessibility)*100/protein.max_asa),4)}%\n")
         # Get chain data
@@ -175,3 +177,36 @@ def atomic_accessibility(output, protein):
             
             # Write data row
             writer.writerow([atom_id, residue_name, residue_id, chain_name, round(accessibility,4), round(percent_accessibility,4)])
+
+def residue_accessibility(output, protein):
+    """
+    Save protein atom accessibility data to a CSV file.
+
+    Columns: Atom ID, Residue Name, Residue Number, Chain Name, Accessibility,
+    and Percentage Accessibility relative to total surface area.
+
+    Args:
+        protein (Protein): Protein instance with atom accessibility data.
+        output (str): Path to save the CSV file (default "protein_accessibility.csv").
+    """
+    # Handle wrong output path
+    if not os.path.exists(output):
+        raise FileNotFoundError(f"No directory at: {output}")
+
+    # Creat csv file
+    with open(f"{output}/{protein.name}_relative.csv", mode='w+', newline='') as file:
+        writer = csv.writer(file)
+        
+        # Write header row
+        writer.writerow(["residue_name", "residue_id", "chain_name", "accessibility", "relative_accessibility"])
+        
+        # Fetch atomic's level data
+        for residue in protein.residues:
+            residue_name = residue.type
+            residue_id = residue.id  # Name of the residue this atom belongs to
+            chain_name = next(chain.id for chain in protein.chains if any(res.id == residue_id for res in chain.rescontent))
+            accessibility = residue.accessibility
+            relative_accessibility = (residue.accessibility/residue.max_asa) * 100
+            
+            # Write data row
+            writer.writerow([residue_name, residue_id, chain_name, round(accessibility,4), round(relative_accessibility,4)])

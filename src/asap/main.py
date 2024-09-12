@@ -1,5 +1,6 @@
 import argparse
 import importlib
+import asap.shrake_rupley
 import sys
 
 def main():
@@ -16,7 +17,6 @@ def main():
     args = parser.parse_args()
 
     # Extract command and arguments
-    command = args.command
     command_args = [
         '--pdb', str(args.pdb),
         '--probe', str(args.probe),
@@ -24,23 +24,23 @@ def main():
         '--model', str(args.model),
         '--point', str(args.point)
     ]
-    try:
-        command_module = importlib.import_module(f"asap.{command}")
-    except ModuleNotFoundError:
-        print(f"Unrecognized command '{command}'")
-        parser.print_help()
-        sys.exit(1)
+    # try:
+    #     command_module = importlib.import_module(f"asap.shrake_rupley")
+    # except ModuleNotFoundError:
+    #     print(f"Unrecognized command '{command}'")
+    #     parser.print_help()
+    #     sys.exit(1)
 
-    # Build the CLI function name
-    cli_function_name = f"{command}_cli"
-    if not hasattr(command_module, cli_function_name):
-        print(f"No CLI function '{cli_function_name}' found in module '{command}'")
-        sys.exit(1)
+    # # Build the CLI function name
+    # cli_function_name = f"{command}_cli"
+    # if not hasattr(command_module, cli_function_name):
+    #     print(f"No CLI function '{cli_function_name}' found in module '{command}'")
+    #     sys.exit(1)
 
-    cli_function = getattr(command_module, cli_function_name)
+    # cli_function = getattr(command_module, cli_function_name)
 
-    # Execute the CLI function with command_args
-    cli_function(command_args)
+    # # Execute the CLI function with command_args
+    asap.shrake_rupley.shrake_rupley_cli(command_args)
 
 
 if __name__ == '__main__':

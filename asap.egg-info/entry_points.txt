@@ -1,0 +1,2 @@
+[console_scripts]
+asap = asap.main:main
