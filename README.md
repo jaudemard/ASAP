@@ -41,6 +41,37 @@ pip install .
 ```
 You may check if it was correctly installed by running `asap --help`, or with the provided toy and basic usage commands.
 
+/!\ If you get a ModuleNotFound when running `asap`
+
+Use a virtual environment.
+
+Start by running to create the virtual environment.
+````bash
+python -m venv asap
+cd asap
+````
+
+Then, activate the virtual environment
+```bash
+source bin/activate
+```
+
+Install the requirements, from the requirements.txt in the git.
+```bash
+python -m pip install -r requirements.txt
+```
+
+Clone the git repository from there
+```bash
+git clone https://github.com/jaudemard/ASAP
+```
+
+Now you can install the module and run it
+```bash
+python -m pip install .
+```
+
+
 ## Basic Usage
 
 We'll use the pdb structure [1L2Y](https://www.rcsb.org/structure/1L2Y) as a toy.

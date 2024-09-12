@@ -1,5 +1,5 @@
 shrake_and_rupley.pdf
 *.pyc
 build/
-asap/asap.egg-info
+asap.egg-info/
 *.ipynb
