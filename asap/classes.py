@@ -1,7 +1,7 @@
 import Bio.PDB as pdb
 import numpy as np
 import os
-import sys
+from scipy.spatial import KDTree
 
 ATOMIC_RADII = {
         "H": 1.200,
@@ -29,312 +29,231 @@ ATOMIC_RADII = {
 
 
 class Sphere:
-    def __init__(self, center:list=[0,0,0], radius:int|float=1, method:str="golden", n:int=92):
+    def __init__(self, center=np.array([0, 0, 0]), radius=1, method="golden", n:int=92):
         """
         A sphere is a 3-dimensional object made of a center point and 
-        a lattice. The lattice is done using the golden ratio method, to space
-        evenly point around the center.
+        a lattice. The lattice is done using the golden ratio method to space
+        evenly points around the center.
         """
         self.center = center
         self.radius = radius
+        self.n = n
 
         if method == "golden":
-            self.lattice = self._golden_spirale(n)
+            self.lattice = self._golden_spirale()
+        elif method == "saff_kuijlaars":
+            self.lattice = self._saaf_kuijlaars()
         else:
-            raise Exception("Unkown method to generate spirale.")
+            raise ValueError("Unknown method to generate spiral.")
 
-
-    def _golden_spirale(self, n:int=92):
+    def _golden_spirale(self):
         """
-        Generate sphere forming points around the atom center.
-
-        Uses the golden spiral method to creates evenly spaces points
-        in the shape of a 3 dimensional sphere, like a sphere shaped lattice.
-
-        Args:
-            n (int): Amount of points forming the sphere.
-        Returns:
-            list_points (list of tuples): Coordinates (x,y,z) of the points in the sphere.
+        Generate sphere forming points using the golden spiral or fibonacci method.
         """
         golden_ratio = np.pi * (3 - np.sqrt(5))
+        offset = 2 / n
+        points = []
 
-        offset = 2/ n
-
-        list_points = []
-
-        # Compute the n envenly spaced points 
-        for i in range(0,n):
-            y = i * offset - 1 + (offset/2)
-            r = np.sqrt(1- y * y)
+        for i in range(self.n):
+            y = i * offset - 1 + offset / 2
+            r = np.sqrt(1 - y ** 2)
             phi = i * golden_ratio
             x = np.cos(phi) * r
             z = np.sin(phi) * r
 
-            coord = np.array([x,y,z])
+            points.append(Point(np.array([x, y, z])))
 
-            list_points.append(Point(coord))
-                
-        return list_points
-    
+        return points
 
-    def scale_and_move(self, center:np.array, radius:int|float):
+    def _saff_kuijlaars(self):
         """
-        Scale up or down the sphere and move it to a new center.
-
-        Args:
-            center (np.array): An array of 3 coordinates
-            raidus (int or float): New radius to scale the sphere        
+        Generate sphere forming points usin the Saaf and Kuiklaars method.
         """
-        # Use Van der Walls surface radius by default
-        if radius is None:
-            radius = self.radius
-        # Extract amount of points generated
-        n = len(self.lattice)
+        points = [] # Store points of the lattice
+        for k in range(self.n):
+            theta = np.arccos(1 - 2 * (k + 0.5) / self.n)
+            phi = np.pi * (1 + np.sqrt(5)) * k
+            
+            # Get coordinates
+            x = np.sin(theta) * np.cos(phi) 
+            y = np.sin(theta) * np.sin(phi)
+            z = np.cos(theta)
+            
+            points.append(Point(np.array([x, y, z])))
+        
+        return points
 
-        list_points = []
-        for i in range(0,n):
-            x,y,z = self.lattice[i].coord
-
-            # Scale to match radius
-            x = x * radius
-            y = y * radius
-            z = z * radius
-            # Move around atom coordinates
-            x = x + center[0]
-            y = y + center[1]
-            z = z + center[2]
-
-            coord = np.array([x,y,z])
-
-            list_points.append(Point(coord))
-
-        self.lattice = list_points
+    def scale_and_move(self, center, radius):
+        """Scale up or down the sphere and move it to a new center."""
+        radius = radius or self.radius
+        new_lattice = [
+            Point(point.coord * radius + center) for point in self.lattice
+        ]
+        self.lattice = new_lattice
 
 class Point:
-    def __init__(self, coord:list):
-        """Composite class of the Sphere. Represent a point of its lattice."""
-        self.coord = coord
-        self.accessibility = True # Accessibility of the point by the probe
+    def __init__(self, coord):
+        """
+        A point representing a coordinate in 3D space.
 
-    def set_accessibility(self, accessibility:bool=True):
-        """Update accessibility of the point."""
+        Args:
+            coord (list or np.array): 3D coordinates (x, y, z).
+        """
+        self.coord = np.array(coord)
+        self.accessibility = True  # Default is that the point is accessible
+    
+    def set_accessibility(self, accessibility=True):
+        """
+        Update the accessibility of the point.
+
+        Args:
+            accessibility (bool): True if accessible, False if blocked.
+        """
         self.accessibility = accessibility
 
-
 class Protein:
-    def __init__(self, pdb_path:str=None, model:int=0):
-        """
-        Protein is extracted from a pdb file, include its atoms,
-        residues and chains.
-        """
+    def __init__(self, pdb_path, model=0):
         # Handle wrong path
         if not os.path.exists(pdb_path):
             raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
-        # Handle wrong format (extension)
-        elif pdb_path.split('.')[-1] != "pdb":
-            raise FileNotFoundError(f"No PDB file found at: {pdb_path}")
+        # Handle wrong extension
+        elif pdb_path.split(".")[-1] != "pdb":
+            raise ValueError(f"Invalid file format: {pdb_path}")
         
-        # Get protein name
-        file_name = pdb_path.split("/")[-1].split(".")[0]
-        self.name = file_name
-        # Get structure instances
+        self.name = os.path.basename(pdb_path).split(".")[0]
         self.atoms, self.residues, self.chains, self.structure = self._extract_structure(pdb_path, model)
-        # Area is the sum of the chains area
         self.area = np.sum([chain.area for chain in self.chains])
-        # Default accessibility is the area
         self.accessibility = self.area
 
-    def _extract_structure(self, pdb_path:str, model:int=0): 
+    def _extract_structure(self, pdb_path, model=0):
         """
-        Extract a structure from a pdb file.
-
-        Parse the pdb file with biopython PDB parser, to get chains, 
-        residues and the atoms. Create instance of Chain, Residue and
-        Atom class for each of them. Return list of Chain, Residue,
-        Atom and the protein's structure.
-
-        It excludes water molecules.
+        Extract structure from a PDB file using BioPython parser.
 
         Args:
-            pdb_path (str): Path of the pdb file.
-            model (int): number of model to use if different models are
-                in the pdb file.
+            pdb_path (str): Path to the pdb_file
+            model (int): Model to use if there is several in the pdb.
         Returns:
-            atoms (list of Atom): A list of Atom, from the protein's atoms.
-            residues (list of Residue): A list of Residue from the protein's residues.
-            chains (list of Chain): A list of Chain from the protein's chains.
-            structure: The Bio.PDB.PDBParser structure object
+            atoms (list of Atom): Atoms list in the protein
+            residues (list of Residue): Residues list in the protein
+            chains (list of Chain): Chains list in the protien
+            structure: The BioPython structure object builded from the file.
         """
+        atoms, residues, chains = [], [], []
 
-        chains = []
-        residues = []
-        atoms = []
-
-        # Use biopython parser to extract whole structure and its content
+        # Extract the structure with Biopython
         structure = pdb.PDBParser().get_structure(self.name, pdb_path)
 
+        # Parse of the structure
         for chain in structure[model]:
-            # Store the chain's residues
             chain_res = []
-
             for amino_acid in chain:
-                # Exclude water molecules
+                # Exclude Water
                 if amino_acid.resname == "HOH": continue
-                # Store the residue's atoms
-                res_atoms = []
-
+                # Exclue Hetero Atoms
+                if amino_acid.id[0] == "H": continue
+                res_atoms = [] # to store the residue atoms
                 for atom in amino_acid:
-                    # Extract data about the atom
-                    elem = atom.element
-                    id = atom.id
-                    residue = amino_acid.resname
                     coord = np.array(atom.coord)
+                    elem = atom.element
                     radius = ATOMIC_RADII[elem]
+                    atom_obj = Atom(atom.id, elem, coord, radius, amino_acid.resname)
 
-                    # Create an object of the Atom class
-                    atom_object = Atom(id, elem, residue, coord, radius)
-                    # Add atoms to the structure list
-                    atoms.append(atom_object)
-                    # Add atoms to the residue's atoms list
-                    res_atoms.append(atom_object)
+                    # Create an atom
+                    atoms.append(atom_obj) # Add to the protein's atoms list
+                    res_atoms.append(atom_obj) # Add to the residue's atoms list
                 
-                # Extract data about the residue
-                id = amino_acid.id[1]
-                type = amino_acid.resname
-                res_chain = chain.id
+                # Create a Residue
+                residue_obj = Residue(amino_acid.id[1], amino_acid.resname, chain.id, res_atoms)
+                residues.append(residue_obj) # Add to the protein's residues list
+                chain_res.append(residue_obj) # Add to the chain's residues list
 
-                # Create an object of the residue class
-                residue_object = Residue(id, type, res_chain, res_atoms)
+            # Create a Chain
+            chain_obj = Chain(chain.id, chain_res, self.name)
+            chains.append(chain_obj) # Add to the protein's chains list
 
-                # Add residue to the structure list
-                residues.append(residue_object)
-                # Add residue to the chain class
-                chain_res.append(residue_object)
-            
-            # Extract data about the chain
-            id = chain.id
-            protein = self.name
-
-            # Create an object of the Chain class
-            chain_object = Chain(id, chain_res, protein)
-
-            # Add chain to the structure list
-            chains.append(chain_object)
-        
         return atoms, residues, chains, structure
-    
-    
+
     def update_accessibility(self):
         """
-        Update accessibility with the sum of the chain accessibility.
+        Update accessibility with the sum of the protein's chains accessibility.
         """
         self.accessibility = np.sum([chain.accessibility for chain in self.chains])
 
+
 class Chain:
-    def __init__(self, id, rescontent:list=None, protein:str=None):
-        """
-        Chain is part of a protein.
-        """
+    def __init__(self, id, rescontent=None, protein=None):
+        """A chain is part of a Protein"""
         self.id = id
         self.rescontent = rescontent or []
         self.protein = protein or "protein"
 
-        # Area of a chain is the sum of the residues area
-        self.area = np.sum([res.area for res in rescontent])
-        # Default accessibility is the area
-        self.accessibility = self.area # Default is full accessibility
-        
+        # Surface area is the sum its residues area
+        self.area = np.sum([res.area for res in self.rescontent])
+        self.accessibility = self.area
+
     def update_accessibility(self):
         """
-        Update accessibility with the sum of the residues accessibility.
+        Update accessibility with the sum of the chain's residues accessibility.
         """
-        # Chain accessibility is the sum of its residue accessibility
         self.accessibility = np.sum([res.accessibility for res in self.rescontent])
-            
+
 
 class Residue:
-    def __init__(self, id:str, type:str, chain:Chain=None, atomscontent:list=None):
-        """
-        Residue is part of a protein chain, or a standalone amino acid.
-        """
+    def __init__(self, id, type, chain=None, atomscontent=None):
+        """A Residue is part of a Chain's"""
         self.id = id
         self.type = type
         self.atomscontent = atomscontent or []
         self.chain = chain or "Chain"
         
-        # Area of a residue is the sum of the atoms area
+        # Surface area is the sum of its atoms Van Der Walls surface
         self.area = np.sum([atom.area for atom in self.atomscontent])
-        # Default accessibility is the area
-        self.accessibility = self.area # Default is full accessibility
-    
+        self.accessibility = self.area
+
     def update_accessibility(self):
         """
-        Update accessibility with the sum of the atoms accessibility.
+        Update the accessibility with the sum of the residue's atoms accessibility.
         """
-        # Amino acid accessibility is the sum of its atoms accessibility
         self.accessibility = np.sum([atom.accessibility for atom in self.atomscontent])
-        
+
+
 class Atom:
-    def __init__(self, id:str, elem:str, coord:np.array, radius:float|int, residue:str=None):
-        """
-        An Atom is part of a residue, or a standalone atom.
-        """
+    def __init__(self, id:str, elem:str, coord:np.array, radius:int|float, residue:str=None):
+        """An Atom is part of a Residue."""
         self.id = id
         self.elem = elem
-        self.residue = residue # Name of the parent residue
         self.coord = coord
-        self.radius = radius # Van der Walls raidus
-
-        # Van der Walls surface
-        self.area = 4 * np.pi * (ATOMIC_RADII[elem])**2
-    
-        self.accessibility = self.area # Default is all surface is accessible
-
-        # Closest atoms
-        self.neighbour = []
-
+        self.residue = residue
+        self.radius = radius # Radius of the Van der Walls space around the atom
+        self.area = 4 * np.pi * (ATOMIC_RADII[elem]) ** 2
+        self.accessibility = self.area
+        self.neighbour = [] # Closest atoms
 
     def distance(self, coord2:np.array):
-        """
-        Distance calculation between the atom and a given point.
-        
-        Args
-            coord2 (np.array): A list of 3 coordinates with which distance is
-                calculated.
+        """Compute distance between an atom and a point.
+        Args:
+            coord2 (np.array): Coordinates of a point in a 3D space.
         Returns:
-            distance (float): Distance between the atom and 
-                the given point.
+            Distance between self coordinates and the point.
         """
-        # Extract the Atom coordinates
-        coord1 = self.coord
-        coord2 = coord2
-        distance = np.linalg.norm(coord1 - coord2)
-        return distance
-    
+        return np.linalg.norm(self.coord - coord2)
 
-    def connectivity(self, atoms_list:list, threshold:int|float=None, probe_size:int|float=None):
-        """Compute the neighbour of the Atom with a max distance.
-        
-        Args
-            atoms_list (list): list of Atom object with which the connectivity
-                is computed.
-            threshold (float or int): maximum distance to characterize a
-                neighbouring atom.
-            probe_size (float or int): Size of the probe, to compute ideal threshold automatically.
-        
-        Returns
-            neighbours (list): list of Atoms considered as neighbours
+    def connectivity(self, atoms_list:list, threshold:int|float):
+        """Find nearest atoms using KDTree.
+
+        Args:
+            atoms_list (list of Atom): A list of Atoms within which
+                neighbours are searched for.
+            threshold (int or float): Maximum distance to qualify an atom as
+                a neighbour.
         """
-        if threshold is None:
-            pass # TODO
-        # Create (or reset) attribute to store the neighbour
-        self.neighbour = []
-        # Check distance with atoms in the list
-        for atom in atoms_list:
-            distance = self.distance(atom.coord)
-            # If distance is less than the threshold it's a neighbour
-            if distance < threshold:
-                self.neighbour.append(atom)
+        atom_coords = np.array([atom.coord for atom in atoms_list])
+        # Build a KDTree for the atom coordinates
+        tree = KDTree(atom_coords)
+        # Find indices of atoms within the threshold distance
+        indices = tree.query_ball_point(self.coord, r=threshold)
+        # Use the indices to find neighboring atoms
+        self.neighbour = [atoms_list[i] for i in indices if not np.array_equal(atoms_list[i].coord, self.coord)]
 
 
 if __name__ == "__main__":
