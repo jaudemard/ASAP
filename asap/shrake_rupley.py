@@ -68,7 +68,7 @@ def shrake_rupley(pdb_file, model, probe, sphere_point, output):
 
     for atom in protein.atoms:
         # Create a sphere with golden ratio lattice
-        sphere = classes.Sphere(n=sphere_point, method="saff_kuijlaars")
+        sphere = classes.Sphere(n=sphere_point, method="golden")
         sphere.scale_and_move(center=atom.coord, radius=(atom.radius+probe))
 
         # Compute closest atoms to limit calculation
@@ -131,7 +131,8 @@ def log_output(output:str, protein:classes.Protein, model:int, probe:float|int):
                     f"{len(protein.residues)} Residues\n"
                     f"{len(protein.atoms)} Atoms\n"
                     f"Accessible surface area by the solvent (Squared Angstrum):"
-                    f"Protein: {round(protein.accessibility,4)}\n")
+                    f"Protein: {round(protein.accessibility,4)}\n"
+                    f"Protein relative SASA: {round(((protein.accessibility)*100/protein.max_asa),4)}%\n")
         # Get chain data
         for chain in protein.chains:
             log.write(f"Chain {chain.id}: {round(chain.accessibility,4)}\n")

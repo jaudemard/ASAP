@@ -1,2 +1,6 @@
 shrake_and_rupley.pdf
 toy/
+*.pyc
+build/
+asap/asap.egg-info
+*.ipynb

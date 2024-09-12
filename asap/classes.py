@@ -27,6 +27,30 @@ ATOMIC_RADII = {
         "HG": 1.550,
     }
 
+MAX_ASA ={
+    'ALA': 121.0,
+    'ARG': 265.0,
+    'ASN': 187.0,
+    'ASP': 187.0,
+    'CYS': 148.0,
+    'GLU': 214.0,
+    'GLN': 214.0,
+    'GLY': 97.0,
+    'HIS': 216.0,
+    'ILE': 195.0,
+    'LEU': 191.0,
+    'LYS': 230.0,
+    'MET': 203.0,
+    'PHE': 228.0,
+    'PRO': 154.0,
+    'SER': 143.0,
+    'THR': 163.0,
+    'TRP': 264.0,
+    'TYR': 255.0,
+    'VAL': 165.0
+}
+
+
 
 class Sphere:
     def __init__(self, center=np.array([0, 0, 0]), radius=1, method="golden", n:int=92):
@@ -41,8 +65,6 @@ class Sphere:
 
         if method == "golden":
             self.lattice = self._golden_spirale()
-        elif method == "saff_kuijlaars":
-            self.lattice = self._saaf_kuijlaars()
         else:
             raise ValueError("Unknown method to generate spiral.")
 
@@ -63,24 +85,6 @@ class Sphere:
 
             points.append(Point(np.array([x, y, z])))
 
-        return points
-
-    def _saff_kuijlaars(self):
-        """
-        Generate sphere forming points usin the Saaf and Kuiklaars method.
-        """
-        points = [] # Store points of the lattice
-        for k in range(self.n):
-            theta = np.arccos(1 - 2 * (k + 0.5) / self.n)
-            phi = np.pi * (1 + np.sqrt(5)) * k
-            
-            # Get coordinates
-            x = np.sin(theta) * np.cos(phi) 
-            y = np.sin(theta) * np.sin(phi)
-            z = np.cos(theta)
-            
-            points.append(Point(np.array([x, y, z])))
-        
         return points
 
     def scale_and_move(self, center, radius):
@@ -122,7 +126,12 @@ class Protein:
         
         self.name = os.path.basename(pdb_path).split(".")[0]
         self.atoms, self.residues, self.chains, self.structure = self._extract_structure(pdb_path, model)
+
+        # Surface area is the sum of its chains area
         self.area = np.sum([chain.area for chain in self.chains])
+        # Get reference max ASA from sum of chains max ASA
+        self.max_asa = np.sum([chain.max_asa for chain in self.chains])
+
         self.accessibility = self.area
 
     def _extract_structure(self, pdb_path, model=0):
@@ -189,6 +198,9 @@ class Chain:
 
         # Surface area is the sum its residues area
         self.area = np.sum([res.area for res in self.rescontent])
+        # Get reference maximum ASA from sum of residues max ASA
+        self.max_asa = np.sum([res.max_asa for res in self.rescontent])
+
         self.accessibility = self.area
 
     def update_accessibility(self):
@@ -208,6 +220,9 @@ class Residue:
         
         # Surface area is the sum of its atoms Van Der Walls surface
         self.area = np.sum([atom.area for atom in self.atomscontent])
+        # Get reference max ASA of the residue in a Gly-[residue]-Gly context
+        self.max_asa = MAX_ASA[type]
+
         self.accessibility = self.area
 
     def update_accessibility(self):
