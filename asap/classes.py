@@ -218,7 +218,7 @@ class Residue:
         self.atomscontent = atomscontent or []
         self.chain = chain or "Chain"
         
-        # Surface area is the sum of its atoms Van Der Walls surface
+        # Surface area is the sum of its atoms Van Der Waals surface
         self.area = np.sum([atom.area for atom in self.atomscontent])
         # Get reference max ASA of the residue in a Gly-[residue]-Gly context
         self.max_asa = MAX_ASA[type]
@@ -239,7 +239,7 @@ class Atom:
         self.elem = elem
         self.coord = coord
         self.residue = residue
-        self.radius = radius # Radius of the Van der Walls space around the atom
+        self.radius = radius # Radius of the Van der Waals space around the atom
         self.area = 4 * np.pi * (ATOMIC_RADII[elem]) ** 2
         self.accessibility = self.area
         self.neighbour = [] # Closest atoms

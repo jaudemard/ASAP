@@ -8,8 +8,8 @@ The `shrake_rupley` command of asap, aims to compute a protein's SASA from a pdb
 
 **The method is based on the work of Shrake and Rupley (1971), as it uses a rolling probe process to capture which part of the atoms surface is accessible or not.**
 
-For each atom, a lattice is create in a sphere shape, around the atom center. The sphere radius is the sum of the Van der Walls radius and the radius of the probe.  
-For each point of the lattice, if its distance to another atom is lesser than that atom's Van der Walls and probe radius, then the point is not accessible.  
+For each atom, a lattice is create in a sphere shape, around the atom center. The sphere radius is the sum of the Van der Waals radius and the radius of the probe.  
+For each point of the lattice, if its distance to another atom is lesser than that atom's Van der Waals and probe radius, then the point is not accessible.  
 The accessible surface is then proportionnal to the amount of accessible points.
 
 To space envely the points on the sphere, we chose to use tu Fibonacci Spirale also called the Golden Ratio Spirale.
@@ -39,7 +39,7 @@ Go into the repository ASAP and execute the following command
 ```bash
 pip install .
 ```
-You may check if it was correctly installed by running `asap --help`.
+You may check if it was correctly installed by running `asap --help`, or with the provided toy and basic usage commands.
 
 ## Basic Usage
 
@@ -50,7 +50,7 @@ Run a simple accessible surface calculation, without a probe:
 asap shrake_rupley --pdb toy/1l2y.pdb --probe 0
 ```
 
-Use a probe the size of an oxygen Van der Walls area, to mimic a water molecule, on the third model of the file.
+Use a probe the size of an oxygen Van der Waals area, to mimic a water molecule, on the third model of the file.
 ```bash
 asap shrake_rupley --pdb toy/1l2y.pdb --probe 1.52 --model 2 --output results/
 ```
