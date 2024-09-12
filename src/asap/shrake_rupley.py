@@ -204,7 +204,7 @@ def residue_accessibility(output, protein):
         for residue in protein.residues:
             residue_name = residue.type
             residue_id = residue.id  # Name of the residue this atom belongs to
-            chain_name = next(chain.id for chain in protein.chains if any(res.id == residue_id for res in chain.rescontent))
+            chain_name = residue.chain
             accessibility = residue.accessibility
             relative_accessibility = (residue.accessibility/residue.max_asa) * 100
             
