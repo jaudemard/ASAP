@@ -3,13 +3,8 @@ channels:
   - conda-forge
 dependencies:
   - python
-  - pip:
-    - pandas
-    - numpy
-    - argparse
-    - biopython
-    - scipy
-    - setuptools
-    - os
-    - sys
-    - csv
+  - pandas
+  - biopython
+  - scipy
+  - setuptools
+  - csv
